@@ -2,6 +2,9 @@ const express = require("express");
 const path = require("path");
 const hbs = require("hbs");
 
+const geocode = require("./utils/geocode");
+const forecast = require("./utils/forecast");
+
 const app = express();
 
 const staticDirectoryPath = path.join(__dirname, "../public");
@@ -32,6 +35,43 @@ app.get("/help/*", (req, res) => {
     errorMessage: "Help article not found",
     name: "user name",
   });
+});
+
+app.get("/weather", (req, res) => {
+  if (!req.query.address) {
+    return res.send({
+      error: "You must provide an address",
+    });
+  } else {
+    geocode(
+      req.query.address,
+      (err, { latitude, longitude, location } = {}) => {
+        if (err) {
+          return res.send(err);
+        }
+
+        forecast(latitude, longitude, (err, data) => {
+          if (err) {
+            return res.send(err);
+          }
+
+          return res.send({
+            forecast: data.weather_descriptions.join(),
+            location,
+            address: req.query.address,
+          });
+        });
+      }
+    );
+  }
+});
+
+app.get("/products", (req, res) => {
+  if (!req.query.search) {
+    res.send({ error: "You must provide a search term" });
+  } else {
+    res.send({ products: [] });
+  }
 });
 
 app.get("*", (req, res) => {
