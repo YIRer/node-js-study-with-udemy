@@ -17,7 +17,7 @@ MongoClient.connect(
 
     db.collection("tasks")
       .deleteOne({
-        description: 'Clean the house',
+        description: "Clean the house",
       })
       .then((result) => {
         console.log(result);
