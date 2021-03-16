@@ -1,6 +1,18 @@
 const express = require("express");
 const path = require("path");
 const http = require("http");
+const BadWords = require("bad-words");
+const {
+  generateMessage,
+  generateLocationMessage,
+} = require("./utils/messages.js");
+
+const {
+  addUser,
+  removeUser,
+  getUser,
+  getUsersInRoom,
+} = require("./utils/users.js");
 
 const socketio = require("socket.io");
 
@@ -17,20 +29,66 @@ app.use(express.static(publicDirectoryPath));
 io.on("connection", (socket) => {
   console.log("new connection");
 
-  socket.emit("message", "Welcome");
-  socket.broadcast.emit("message", "A new user has joined!!");
+  socket.on("sendMessage", (msg, callback) => {
+    const filter = new BadWords();
 
-  socket.on("sendMessage", (msg) => {
-    console.log(msg);
-    io.emit("message", msg);
+    if (filter.isProfane(msg)) {
+      return callback("Profanity is not allowed!");
+    }
+    const user = getUser(socket.id);
+    io.to(user.room).emit("message", generateMessage(user.username, msg));
+    callback();
   });
 
   socket.on("disconnect", () => {
-    io.emit("message", "A user has left!!");
+    const user = removeUser(socket.id);
+    if (user) {
+      io.to(user.room).emit(
+        "message",
+        generateMessage("System", `${user.username} has left!!`)
+      );
+
+      io.to(user.room).emit("roomData", {
+        room: user.room,
+        users: getUsersInRoom(user.room),
+      });
+    }
   });
 
-  socket.on("sendLocation", (coords) => {
-    io.emit("message", `https://google.co.kr/maps?q=${coords.latitude},${coords.longitude}`);
+  socket.on("sendLocation", (coords, callback) => {
+    const user = getUser(socket.id);
+    io.to(user.room).emit(
+      "locationMessage",
+      generateLocationMessage(
+        user.username,
+        `https://google.co.kr/maps?q=${coords.latitude},${coords.longitude}`
+      )
+    );
+
+    callback();
+  });
+
+  socket.on("join", (options, callback) => {
+    const { error, user } = addUser({ id: socket.id, ...options });
+
+    if (error) {
+      return callback(error);
+    }
+
+    const { username, room } = user;
+
+    socket.join(room);
+
+    socket.emit("message", generateMessage("System", "Welcome!"));
+    socket.broadcast
+      .to(room)
+      .emit("message", generateMessage("System", `${username} has joined!!`));
+
+    io.to(room).emit("roomData", {
+      room,
+      users: getUsersInRoom(room),
+    });
+    callback();
   });
 });
 
